@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en" manifest="clock.appcache">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clock">
+<title>Desk Clock</title>
+<!--
+  Written for iOS 9 Safari (iPhone 4s): ES5 only, XMLHttpRequest instead of fetch,
+  no CSS variables, prefixed flexbox. Keep it that way when adding features.
+-->
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    color: #f2f2f2;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    -webkit-text-size-adjust: 100%;
+    overflow: hidden;
+  }
+
+  #app {
+    height: 100%;
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-box-orient: vertical;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-box-pack: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    -webkit-box-align: center;
+    -webkit-align-items: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  #time {
+    font-weight: 100;
+    font-size: 26vw;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  #ampm {
+    font-size: 0.18em;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    margin-left: 0.15em;
+    color: #8a8a8a;
+  }
+  #date {
+    margin-top: 2vw;
+    font-size: 5vw;
+    font-weight: 300;
+    color: #b5b5b5;
+    letter-spacing: 0.04em;
+  }
+
+  #weather {
+    margin-top: 5vw;
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-box-align: center;
+    -webkit-align-items: center;
+    align-items: center;
+    color: #d8d8d8;
+    opacity: 0;
+    -webkit-transition: opacity 0.6s;
+    transition: opacity 0.6s;
+  }
+  #weather.ready { opacity: 1; }
+  #w-icon { font-size: 7vw; margin-right: 2.5vw; }
+  #w-temp { font-size: 7vw; font-weight: 200; margin-right: 3vw; }
+  #w-detail { text-align: left; font-size: 3.2vw; line-height: 1.35; color: #9a9a9a; }
+  #w-desc { color: #d8d8d8; }
+
+  /* Portrait: the screen is narrow, so size off the width more generously */
+  @media (orientation: portrait) {
+    #time { font-size: 27vw; }
+    #date { font-size: 6vw; margin-top: 3vw; }
+    #weather { margin-top: 10vw; }
+    #w-icon, #w-temp { font-size: 10vw; }
+    #w-detail { font-size: 4.2vw; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="time"><span id="hm">--:--</span><span id="ampm"></span></div>
+  <div id="date">&nbsp;</div>
+  <div id="weather">
+    <div id="w-icon"></div>
+    <div id="w-temp"></div>
+    <div id="w-detail">
+      <div id="w-desc"></div>
+      <div id="w-extra"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- Settings -------------------------------------------------------
+  var CONFIG = {
+    location: '',          // '' = detect from IP, or e.g. 'Waterloo,Canada'
+    units: 'C',            // 'C' or 'F'
+    refreshMinutes: 15,
+    retryMinutes: 2
+  };
+
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
+
+  function $(id) { return document.getElementById(id); }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // localStorage can throw (private mode), so every access is guarded.
+  function load(key, fallback) {
+    try { var v = localStorage.getItem(key); return v === null ? fallback : v; }
+    catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  // ---- Clock ----------------------------------------------------------
+  var use24h = load('clock24h', '1') === '1';
+
+  function renderClock() {
+    var now = new Date();
+    var h = now.getHours();
+    var ampm = '';
+    if (!use24h) {
+      ampm = h < 12 ? 'AM' : 'PM';
+      h = h % 12 || 12;
+    }
+    $('hm').innerHTML = (use24h ? pad(h) : h) + ':' + pad(now.getMinutes());
+    $('ampm').innerHTML = ampm;
+    $('date').innerHTML = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
+  }
+
+  function tick() {
+    renderClock();
+    // Re-sync to the top of each second so the minute flips on time.
+    setTimeout(tick, 1000 - (new Date().getMilliseconds()) + 5);
+  }
+
+  // Tap the time to switch between 12h and 24h.
+  $('time').addEventListener('click', function () {
+    use24h = !use24h;
+    save('clock24h', use24h ? '1' : '0');
+    renderClock();
+  });
+
+  // ---- Weather --------------------------------------------------------
+  // wttr.in weather codes (WorldWeatherOnline) -> emoji
+  function iconFor(code, isNight) {
+    code = parseInt(code, 10);
+    if (code === 113) return isNight ? '🌙' : '☀️';       // clear
+    if (code === 116) return isNight ? '☁️' : '⛅️';       // partly cloudy
+    if (code === 119 || code === 122) return '☁️';                   // cloudy
+    if (code === 143 || code === 248 || code === 260) return '🌫';   // fog
+    if (code === 200 || code >= 386) return '⛈';                          // thunder
+    if ([179, 227, 230, 323, 326, 329, 332, 335, 338, 368, 371].indexOf(code) !== -1)
+      return '❄️';                                                   // snow
+    if ([182, 185, 281, 284, 311, 314, 317, 320, 350, 362, 365, 374, 377].indexOf(code) !== -1)
+      return '🌨';                                                   // sleet
+    return '🌧';                                                     // rain / drizzle
+  }
+
+  function isNightNow() {
+    var h = new Date().getHours();
+    return h < 6 || h >= 20;
+  }
+
+  function renderWeather(data) {
+    var cur = data.current_condition[0];
+    var today = data.weather && data.weather[0];
+    var f = CONFIG.units === 'F';
+    var temp = f ? cur.temp_F : cur.temp_C;
+    var desc = (cur.weatherDesc[0].value || '').replace(/\s+$/, '');
+
+    $('w-icon').innerHTML = iconFor(cur.weatherCode, isNightNow());
+    $('w-temp').innerHTML = temp + '&deg;';
+    $('w-desc').innerHTML = desc;
+
+    var extra = [];
+    if (today) {
+      extra.push('H ' + (f ? today.maxtempF : today.maxtempC) + '&deg;  L ' +
+                 (f ? today.mintempF : today.mintempC) + '&deg;');
+    }
+    extra.push('Feels ' + (f ? cur.FeelsLikeF : cur.FeelsLikeC) + '&deg;');
+    $('w-extra').innerHTML = extra.join(' &middot; ');
+
+    $('weather').className = 'ready';
+  }
+
+  // Prefer HTTPS (works once ISRG Root X1 is installed on the phone), but fall
+  // back to plain HTTP if the TLS handshake fails. An HTTPS page can't make HTTP
+  // requests at all, so the fallback only applies when the page is served over HTTP.
+  var weatherProtocols = location.protocol === 'https:' ? ['https:'] : ['https:', 'http:'];
+  var weatherProtocol = 0;
+
+  function fetchWeather() {
+    var url = weatherProtocols[weatherProtocol] + '//wttr.in/' +
+              encodeURIComponent(CONFIG.location) + '?format=j1';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = 20000;
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try {
+          renderWeather(JSON.parse(xhr.responseText));
+          schedule(CONFIG.refreshMinutes);
+          return;
+        } catch (e) {}
+      }
+      schedule(CONFIG.retryMinutes);
+    };
+    xhr.onerror = xhr.ontimeout = function () {
+      // A connection-level failure on HTTPS is most likely a certificate
+      // problem, so retry right away over the next protocol.
+      if (weatherProtocol < weatherProtocols.length - 1) {
+        weatherProtocol++;
+        fetchWeather();
+        return;
+      }
+      weatherProtocol = 0;
+      schedule(CONFIG.retryMinutes);
+    };
+    xhr.send();
+  }
+
+  var weatherTimer = null;
+  function schedule(minutes) {
+    clearTimeout(weatherTimer);
+    weatherTimer = setTimeout(fetchWeather, minutes * 60 * 1000);
+  }
+
+  // Timers pause while the phone is locked; refresh as soon as we're visible again.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { renderClock(); fetchWeather(); }
+  });
+
+  // Stop iOS rubber-band scrolling in standalone mode.
+  document.addEventListener('touchmove', function (e) { e.preventDefault(); }, false);
+
+  // ---- Offline cache --------------------------------------------------
+  // When serve.py is running and the files changed, Safari downloads the new
+  // version in the background; swap it in and reload. If the PC is off, the
+  // update check just fails quietly and the cached copy keeps running.
+  var appCache = window.applicationCache;
+  if (appCache) {
+    appCache.addEventListener('updateready', function () {
+      try { appCache.swapCache(); } catch (e) {}
+      window.location.reload();
+    }, false);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) {
+        try { appCache.update(); } catch (e) {}
+      }
+    });
+  }
+
+  tick();
+  fetchWeather();
+})();
+</script>
+</body>
+</html>
