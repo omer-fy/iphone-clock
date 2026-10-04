@@ -18,6 +18,7 @@ CACHED_FILES = [
     'apple-touch-icon.png',
     'fonts/inter-latin-300-normal.woff',
     'fonts/inter-latin-400-normal.woff',
+    'fonts/inter-tight-latin-500-normal.woff',
 ]
 
 

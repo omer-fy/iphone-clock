@@ -25,6 +25,12 @@
     font-weight: 400;
     src: url('fonts/inter-latin-400-normal.woff') format('woff');
   }
+  /* Inter Tight: Inter's display cut, spaced for large sizes (OFL 1.1, fonts/InterTight-LICENSE.txt) */
+  @font-face {
+    font-family: 'Inter Tight';
+    font-weight: 500;
+    src: url('fonts/inter-tight-latin-500-normal.woff') format('woff');
+  }
 
   html, body {
     margin: 0;
@@ -58,23 +64,49 @@
     text-align: center;
   }
 
+  /* Type hierarchy: one dominant element (the time), then small, widely
+     tracked labels. Display type gets tighter tracking, small caps looser. */
   #time {
-    font-weight: 400;
-    font-size: 30vw;
-    line-height: 1;
-    letter-spacing: -0.02em;
+    font-family: 'Inter Tight', Inter, -apple-system, "Helvetica Neue", sans-serif;
+    font-weight: 500;
+    font-size: 33vw;     /* widest time ("04:44") is 2.7em: ~89% of the width */
+    line-height: 0.8;    /* trim the empty space above the digits */
+    letter-spacing: -0.01em;
     white-space: nowrap;
   }
+
+  /* Seconds bar: fills smoothly over each minute. Sized by #clock, which
+     shrink-wraps the time, so the bar spans exactly the digits. */
+  #seconds {
+    position: relative;
+    height: 4px;
+    margin-top: 3.2vw;
+    border-radius: 2px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.13);
+    /* Make WebKit clip the transformed child to the rounded corners */
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+  }
+  #seconds-fill {
+    width: 100%;
+    height: 100%;
+    border-radius: 2px;
+    background: #f2f2f2;
+    -webkit-transform: translate3d(-100%, 0, 0);
+    transform: translate3d(-100%, 0, 0);
+  }
+
   #date {
-    margin-top: 1vw;
-    font-size: 5vw;
-    font-weight: 300;
-    color: #b5b5b5;
-    letter-spacing: 0.02em;
+    margin-top: 3.4vw;
+    font-size: 3.4vw;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: #8f8f8f;
   }
 
   #weather {
-    margin-top: 5vw;
+    margin-top: 4.5vw;
     color: #d8d8d8;
     opacity: 0;
     -webkit-transition: opacity 0.6s;
@@ -104,14 +136,17 @@
 
   /* Light theme (double-tap to switch) */
   body.light { background: #f5f5f3; color: #111; }
-  body.light #date { color: #555; }
-  body.light #weather, body.light #w-desc { color: #333; }
-  body.light #w-detail { color: #777; }
+  body.light #date { color: #5c5c5c; }
+  body.light #weather, body.light #w-desc { color: #2a2a2a; }
+  body.light #w-detail { color: #5f5f5f; }
+  body.light #seconds { background: rgba(0,0,0,0.1); }
+  body.light #seconds-fill { background: #111; }
 
   /* Portrait: the screen is narrow, so size off the width more generously */
   @media (orientation: portrait) {
-    #time { font-size: 32vw; }
-    #date { font-size: 7vw; margin-top: 2vw; }
+    #time { font-size: 34vw; }
+    #seconds { margin-top: 4.5vw; }
+    #date { font-size: 4.4vw; margin-top: 4.5vw; }
     #weather { margin-top: 12vw; }
     #w-icon, #w-temp { font-size: 10vw; }
     #w-detail { font-size: 4.2vw; }
@@ -120,7 +155,10 @@
 </head>
 <body>
 <div id="app">
-  <div id="time">--:--</div>
+  <div id="clock">
+    <div id="time">--:--</div>
+    <div id="seconds"><div id="seconds-fill"></div></div>
+  </div>
   <div id="date">&nbsp;</div>
   <div id="weather">
     <div class="w-row">
@@ -167,11 +205,40 @@
   function renderClock() {
     var now = new Date();
     $('time').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes());
-    $('date').innerHTML = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
+    $('date').innerHTML = DAYS[now.getDay()] + ' &middot; ' + MONTHS[now.getMonth()] + ' ' +
+                          now.getDate();
   }
 
+  // The seconds bar is one CSS transition per minute (from wherever we are
+  // now to full, linear), not per-frame JavaScript: the compositor animates
+  // it smoothly, which is far cheaper on the 4s than redrawing every frame.
+  var secondsFill = $('seconds-fill');
+
+  function setFill(fraction, transition) {
+    var t = transition ? '-webkit-transform ' + transition + 'ms linear' : 'none';
+    secondsFill.style.webkitTransition = t;
+    secondsFill.style.transition = transition ? 'transform ' + transition + 'ms linear' : 'none';
+    var x = 'translate3d(' + ((fraction - 1) * 100) + '%, 0, 0)';
+    secondsFill.style.webkitTransform = x;
+    secondsFill.style.transform = x;
+  }
+
+  function syncSeconds() {
+    var now = new Date();
+    var ms = now.getSeconds() * 1000 + now.getMilliseconds();
+    setFill(ms / 60000, 0);
+    secondsFill.offsetWidth;  // force a layout so the jump isn't animated
+    setFill(1, 60000 - ms);
+  }
+
+  var lastMinute = -1;
   function tick() {
     renderClock();
+    var minute = new Date().getMinutes();
+    if (minute !== lastMinute) {
+      lastMinute = minute;
+      syncSeconds();
+    }
     // Re-sync to the top of each second so the minute flips on time.
     setTimeout(tick, 1000 - (new Date().getMilliseconds()) + 5);
   }
@@ -318,7 +385,7 @@
 
   // Timers pause while the phone is locked; refresh as soon as we're visible again.
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) { renderClock(); fetchWeather(); }
+    if (!document.hidden) { renderClock(); syncSeconds(); fetchWeather(); }
   });
 
   // Stop iOS rubber-band scrolling in standalone mode.
