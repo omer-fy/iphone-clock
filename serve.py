@@ -9,9 +9,12 @@ import http.server
 import socket
 import sys
 
-from build import ROOT, build_manifest
+from build import PRAYERS_FILE, ROOT, build_manifest, prayer_data
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+
+# Fetched once at startup (from AlAdhan, by this PC); restart to refresh.
+PRAYERS = b''
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -24,16 +27,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache')
         super().end_headers()
 
+    def send_body(self, body, content_type):
+        self.send_response(200)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
-        if self.path.split('?')[0] == '/clock.appcache':
-            body = build_manifest()
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/cache-manifest')
-            self.send_header('Content-Length', str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        super().do_GET()
+        path = self.path.split('?')[0]
+        if path == '/clock.appcache':
+            self.send_body(build_manifest(PRAYERS), 'text/cache-manifest')
+        elif path == '/' + PRAYERS_FILE:
+            self.send_body(PRAYERS, 'application/json')
+        else:
+            super().do_GET()
 
 
 def lan_ip():
@@ -48,6 +56,8 @@ def lan_ip():
 
 
 if __name__ == '__main__':
+    print('Fetching prayer times...')
+    PRAYERS = prayer_data()
     server = http.server.ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
     print('Open on the iPhone:  http://%s:%d/' % (lan_ip(), PORT))
     print('Ctrl+C to stop.')

@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # Rebuild monthly so prayers.json keeps a year of times ahead
+  schedule:
+    - cron: '17 7 1 * *'
   workflow_dispatch:
 
 permissions:
