@@ -16,8 +16,8 @@ OUT = os.path.join(ROOT, '_site')
 CACHED_FILES = [
     'index.html',
     'apple-touch-icon.png',
-    'fonts/DSEG7Classic-BoldItalic.woff',
-    'fonts/DSEG14Classic-BoldItalic.woff',
+    'fonts/inter-latin-300-normal.woff',
+    'fonts/inter-latin-400-normal.woff',
 ]
 
 

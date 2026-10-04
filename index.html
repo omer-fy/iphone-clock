@@ -14,14 +14,16 @@
   when adding features.
 -->
 <style>
-  /* DSEG by keshikan, SIL Open Font License 1.1 (fonts/DSEG-LICENSE.txt) */
+  /* Inter by Rasmus Andersson, SIL Open Font License 1.1 (fonts/Inter-LICENSE.txt) */
   @font-face {
-    font-family: 'DSEG7';
-    src: url('fonts/DSEG7Classic-BoldItalic.woff') format('woff');
+    font-family: 'Inter';
+    font-weight: 300;
+    src: url('fonts/inter-latin-300-normal.woff') format('woff');
   }
   @font-face {
-    font-family: 'DSEG14';
-    src: url('fonts/DSEG14Classic-BoldItalic.woff') format('woff');
+    font-family: 'Inter';
+    font-weight: 400;
+    src: url('fonts/inter-latin-400-normal.woff') format('woff');
   }
 
   html, body {
@@ -30,11 +32,13 @@
     height: 100%;
     background: #000;
     color: #f2f2f2;
-    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: Inter, -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: rgba(0,0,0,0);
     -webkit-text-size-adjust: 100%;
     overflow: hidden;
+    -webkit-transition: background-color 0.4s, color 0.4s;
+    transition: background-color 0.4s, color 0.4s;
   }
 
   #app {
@@ -54,34 +58,19 @@
     text-align: center;
   }
 
-  /* Segment displays: a dim "all segments on" layer sits behind the lit text,
-     like the unlit segments of a real LCD. DSEG glyphs are fixed width, so
-     the two layers line up exactly. */
-  .segments {
-    position: relative;
-    display: inline-block;
-    white-space: nowrap;
-    line-height: 1;
-  }
-  .segments .ghost {
-    position: absolute;
-    left: 0;
-    top: 0;
-    color: #f2f2f2;
-    opacity: 0.07;
-  }
-  .segments .lit { position: relative; }
-
   #time {
-    font-family: 'DSEG7', monospace;
-    font-size: 24vw;
+    font-weight: 400;
+    font-size: 30vw;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
   }
   #date {
-    margin-top: 4vw;
-    font-family: 'DSEG14', monospace;
+    margin-top: 1vw;
     font-size: 5vw;
-    word-spacing: 0.35em;
+    font-weight: 300;
     color: #b5b5b5;
+    letter-spacing: 0.02em;
   }
 
   #weather {
@@ -104,29 +93,35 @@
     justify-content: center;
   }
   #w-icon { font-size: 7vw; margin-right: 2.5vw; }
-  #w-temp { font-size: 7vw; font-weight: 200; margin-right: 3vw; }
+  #w-temp { font-size: 7vw; font-weight: 300; margin-right: 3vw; }
   #w-detail { text-align: left; font-size: 3.2vw; line-height: 1.35; color: #9a9a9a; }
   #w-desc { color: #d8d8d8; }
 
-  #w-row2 { margin-top: 2vw; font-size: 3.2vw; color: #9a9a9a; }
-  #w-row2 .stat { margin: 0 2.5vw; }
-  #w-row2 b { font-weight: 400; color: #d8d8d8; }
+  #weather, #date, #w-desc, #w-detail {
+    -webkit-transition: color 0.4s;
+    transition: color 0.4s;
+  }
+
+  /* Light theme (double-tap to switch) */
+  body.light { background: #f5f5f3; color: #111; }
+  body.light #date { color: #555; }
+  body.light #weather, body.light #w-desc { color: #333; }
+  body.light #w-detail { color: #777; }
 
   /* Portrait: the screen is narrow, so size off the width more generously */
   @media (orientation: portrait) {
-    #time { font-size: 26vw; }
-    #date { font-size: 7vw; margin-top: 5vw; }
+    #time { font-size: 32vw; }
+    #date { font-size: 7vw; margin-top: 2vw; }
     #weather { margin-top: 12vw; }
     #w-icon, #w-temp { font-size: 10vw; }
-    #w-detail, #w-row2 { font-size: 4.2vw; }
-    #w-row2 { margin-top: 3vw; }
+    #w-detail { font-size: 4.2vw; }
   }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="time" class="segments"><span class="ghost">88:88</span><span class="lit" id="hm">--:--</span></div>
-  <div id="date" class="segments"><span class="ghost">~~~ ~~~ ~~</span><span class="lit" id="date-text"></span></div>
+  <div id="time">--:--</div>
+  <div id="date">&nbsp;</div>
   <div id="weather">
     <div class="w-row">
       <div id="w-icon"></div>
@@ -134,11 +129,8 @@
       <div id="w-detail">
         <div id="w-desc"></div>
         <div id="w-extra"></div>
+        <div id="w-extra2"></div>
       </div>
-    </div>
-    <div class="w-row" id="w-row2">
-      <span class="stat">Humidity <b id="w-humidity"></b></span>
-      <span class="stat">Precip <b id="w-precip"></b></span>
     </div>
   </div>
 </div>
@@ -155,20 +147,27 @@
     retryMinutes: 2
   };
 
-  var DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  var MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-                'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
+  // localStorage can throw (private mode), so every access is guarded.
+  function load(key, fallback) {
+    try { var v = localStorage.getItem(key); return v === null ? fallback : v; }
+    catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
   // ---- Clock ----------------------------------------------------------
   function renderClock() {
     var now = new Date();
-    $('hm').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes());
-    // Always 10 characters so it lines up with the ghost segments.
-    $('date-text').innerHTML = DAYS[now.getDay()] + ' ' + MONTHS[now.getMonth()] + ' ' +
-                               pad(now.getDate());
+    $('time').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes());
+    $('date').innerHTML = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
   }
 
   function tick() {
@@ -176,6 +175,44 @@
     // Re-sync to the top of each second so the minute flips on time.
     setTimeout(tick, 1000 - (new Date().getMilliseconds()) + 5);
   }
+
+  // ---- Theme ----------------------------------------------------------
+  // Double-tap anywhere to switch between dark and light. iOS Safari doesn't
+  // fire dblclick for touches, so detect two quick taps by hand.
+  var theme = load('theme', 'dark');
+
+  function applyTheme() {
+    document.body.className = theme === 'light' ? 'light' : '';
+  }
+
+  function toggleTheme() {
+    theme = theme === 'light' ? 'dark' : 'light';
+    save('theme', theme);
+    applyTheme();
+  }
+
+  var lastTap = { time: 0, x: 0, y: 0 };
+  var lastTouch = 0;
+  document.addEventListener('touchend', function (e) {
+    lastTouch = Date.now();
+    if (e.touches.length || e.changedTouches.length !== 1) return;
+    var t = e.changedTouches[0];
+    var now = Date.now();
+    if (now - lastTap.time < 350 &&
+        Math.abs(t.pageX - lastTap.x) < 40 && Math.abs(t.pageY - lastTap.y) < 40) {
+      e.preventDefault();
+      lastTap.time = 0;
+      toggleTheme();
+    } else {
+      lastTap = { time: now, x: t.pageX, y: t.pageY };
+    }
+  }, false);
+
+  // Mouse double-clicks, for testing on a computer. Ignored right after a
+  // touch so a browser that does fire dblclick for taps doesn't toggle twice.
+  document.addEventListener('dblclick', function () {
+    if (Date.now() - lastTouch > 1000) toggleTheme();
+  }, false);
 
   // ---- Weather --------------------------------------------------------
   // wttr.in weather codes (WorldWeatherOnline) -> emoji
@@ -231,8 +268,8 @@
     $('w-extra').innerHTML = extra.join(' &middot; ');
 
     var precip = precipChance(today);
-    $('w-humidity').innerHTML = cur.humidity + '%';
-    $('w-precip').innerHTML = precip === null ? '&ndash;' : precip + '%';
+    $('w-extra2').innerHTML = 'Humidity ' + cur.humidity + '% &middot; Precip ' +
+                              (precip === null ? '&ndash;' : precip + '%');
 
     $('weather').className = 'ready';
   }
@@ -304,6 +341,7 @@
     });
   }
 
+  applyTheme();
   tick();
   fetchWeather();
 })();
