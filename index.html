@@ -143,15 +143,37 @@
     -webkit-justify-content: center;
     justify-content: center;
   }
-  #w-icon { font-size: 5.4vw; margin-right: 2vw; }
-  #w-temp { font-size: 5.4vw; font-weight: 300; margin-right: 2.4vw; }
-  #w-detail { text-align: left; font-size: 2.6vw; line-height: 1.35; color: #9a9a9a; }
+  /* The temperature's digits are sized to roughly the height of the three
+     detail lines next to it (3 x 2.4vw x 1.35 = ~9.7vw); Inter Tight digits
+     are 0.74em tall and sit low in the line box, hence the nudge up. */
+  #w-icon { font-size: 7.6vw; line-height: 1; margin-right: 1.5vw; }
+  #w-temp {
+    font-family: 'Inter Tight', Inter, -apple-system, "Helvetica Neue", sans-serif;
+    font-weight: 500;
+    font-size: 11vw;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    position: relative;
+    top: -0.06em;
+    margin-right: 2vw;
+  }
+  #w-detail { text-align: left; font-size: 2.4vw; line-height: 1.35; color: #9a9a9a; }
+  /* wttr.in descriptions can be long ("Patchy light rain in area with
+     thunder"); keep them to the width of the lines below. */
+  #w-desc {
+    max-width: 29vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Apple's emoji are drawn smaller within their box than Windows' */
+  .ios #w-icon { font-size: 9.5vw; }
   #w-desc { color: #d8d8d8; }
 
   /* ---- Prayer times ------------------------------------------------------ */
   #prayers {
-    margin-left: 5vw;
-    padding-left: 4.5vw;
+    margin-left: 3.5vw;
+    padding-left: 3.5vw;
     border-left: 1px solid rgba(255,255,255,0.13);
   }
   .prayer {
@@ -164,7 +186,7 @@
     -webkit-box-align: baseline;
     -webkit-align-items: baseline;
     align-items: baseline;
-    width: 25vw;
+    width: 23vw;
     padding: 1.15vw 0;
     color: #8f8f8f;
     -webkit-transition: opacity 0.4s, color 0.4s;
@@ -225,8 +247,11 @@
     #weekday { font-size: 4.2vw; }
     #greg, #hijri { font-size: 3.6vw; margin-top: 1.4vw; }
     #weather { margin-top: 6vw; }
-    #w-icon, #w-temp { font-size: 8.5vw; }
-    #w-detail { font-size: 3.8vw; }
+    #w-icon { font-size: 11vw; }
+    .ios #w-icon { font-size: 13.75vw; }
+    #w-temp { font-size: 16vw; }
+    #w-detail { font-size: 3.5vw; }
+    #w-desc { max-width: 42vw; }
 
     #prayers {
       margin: 7vw 0 0;
@@ -295,9 +320,9 @@
 
   // ---- Settings -------------------------------------------------------
   var CONFIG = {
-    location: '',          // weather: '' = detect from IP, or e.g. 'Waterloo,Canada'
+    location: '43.4516,-80.4925',  // weather for Kitchener; coordinates skip wttr.in's name lookup
     units: 'C',            // 'C' or 'F'
-    refreshMinutes: 15,
+    refreshMinutes: 60,
     retryMinutes: 2
     // Prayer-time location and method are set in build.py (PRAYER_LOCATION).
   };
@@ -312,6 +337,11 @@
                       "Dhu al-Qa'dah", 'Dhu al-Hijjah'];
   var PRAYERS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
   var SUNRISE = 1, MAGHRIB = 4;
+
+  // Apple's emoji render smaller than other platforms'; CSS sizes them up.
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    document.documentElement.className += ' ios';
+  }
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -374,6 +404,7 @@
       lastMinute = minute;
       syncSeconds();
       renderPrayers();
+      if (lastWeather) renderWeather(lastWeather);
     }
     // Re-sync to the top of each second so the minute flips on time.
     setTimeout(tick, 1000 - (new Date().getMilliseconds()) + 5);
@@ -535,6 +566,11 @@
     return Math.max(parseInt(slot.chanceofrain, 10) || 0, parseInt(slot.chanceofsnow, 10) || 0);
   }
 
+  // Last successful response. It's re-rendered every minute so the day/night
+  // icon and the precipitation slot stay current between hourly fetches.
+  var lastWeather = null;
+  var lastWeatherAt = 0;
+
   function renderWeather(data) {
     var cur = data.current_condition[0];
     var today = data.weather && data.weather[0];
@@ -542,9 +578,9 @@
     var temp = f ? cur.temp_F : cur.temp_C;
     var desc = (cur.weatherDesc[0].value || '').replace(/\s+$/, '');
 
-    $('w-icon').innerHTML = iconFor(cur.weatherCode, isNightNow());
-    $('w-temp').innerHTML = temp + '&deg;';
-    $('w-desc').innerHTML = desc;
+    setHtml($('w-icon'), iconFor(cur.weatherCode, isNightNow()));
+    setHtml($('w-temp'), temp + '&deg;');
+    setHtml($('w-desc'), desc);
 
     var extra = [];
     if (today) {
@@ -552,11 +588,11 @@
                  (f ? today.mintempF : today.mintempC) + '&deg;');
     }
     extra.push('Feels ' + (f ? cur.FeelsLikeF : cur.FeelsLikeC) + '&deg;');
-    $('w-extra').innerHTML = extra.join(' &middot; ');
+    setHtml($('w-extra'), extra.join(' &middot; '));
 
     var precip = precipChance(today);
-    $('w-extra2').innerHTML = 'Humidity ' + cur.humidity + '% &middot; Precip ' +
-                              (precip === null ? '&ndash;' : precip + '%');
+    setHtml($('w-extra2'), 'Humidity ' + cur.humidity + '% &middot; Precip ' +
+                           (precip === null ? '&ndash;' : precip + '%'));
 
     $('weather').className = 'ready';
   }
@@ -576,7 +612,10 @@
     xhr.onload = function () {
       if (xhr.status === 200) {
         try {
-          renderWeather(JSON.parse(xhr.responseText));
+          var data = JSON.parse(xhr.responseText);
+          renderWeather(data);
+          lastWeather = data;
+          lastWeatherAt = Date.now();
           schedule(CONFIG.refreshMinutes);
           return;
         } catch (e) {}
@@ -603,9 +642,21 @@
     weatherTimer = setTimeout(fetchWeather, minutes * 60 * 1000);
   }
 
+  // Timers don't run while the phone is locked, so on wake fetch only if the
+  // last update is older than the refresh interval; otherwise wait out the rest.
+  function refreshWeatherIfStale() {
+    var age = Date.now() - lastWeatherAt;
+    var interval = CONFIG.refreshMinutes * 60 * 1000;
+    if (!lastWeatherAt || age >= interval) {
+      fetchWeather();
+    } else {
+      schedule((interval - age) / 60000);
+    }
+  }
+
   // Timers pause while the phone is locked; refresh as soon as we're visible again.
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) { renderClock(); syncSeconds(); renderPrayers(); fetchWeather(); }
+    if (!document.hidden) { renderClock(); syncSeconds(); renderPrayers(); refreshWeatherIfStale(); }
   });
 
   // Stop iOS rubber-band scrolling in standalone mode.
