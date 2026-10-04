@@ -13,7 +13,12 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, '_site')
 
 # Files the phone keeps offline. Add new assets (icons, css, js) here.
-CACHED_FILES = ['index.html']
+CACHED_FILES = [
+    'index.html',
+    'apple-touch-icon.png',
+    'fonts/DSEG7Classic-BoldItalic.woff',
+    'fonts/DSEG14Classic-BoldItalic.woff',
+]
 
 
 def build_manifest():

@@ -6,12 +6,24 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Clock">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Desk Clock</title>
 <!--
   Written for iOS 9 Safari (iPhone 4s): ES5 only, XMLHttpRequest instead of fetch,
-  no CSS variables, prefixed flexbox. Keep it that way when adding features.
+  no CSS variables, prefixed flexbox, WOFF (not WOFF2) fonts. Keep it that way
+  when adding features.
 -->
 <style>
+  /* DSEG by keshikan, SIL Open Font License 1.1 (fonts/DSEG-LICENSE.txt) */
+  @font-face {
+    font-family: 'DSEG7';
+    src: url('fonts/DSEG7Classic-BoldItalic.woff') format('woff');
+  }
+  @font-face {
+    font-family: 'DSEG14';
+    src: url('fonts/DSEG14Classic-BoldItalic.woff') format('woff');
+  }
+
   html, body {
     margin: 0;
     padding: 0;
@@ -42,67 +54,91 @@
     text-align: center;
   }
 
-  #time {
-    font-weight: 100;
-    font-size: 26vw;
-    line-height: 1;
-    letter-spacing: -0.02em;
+  /* Segment displays: a dim "all segments on" layer sits behind the lit text,
+     like the unlit segments of a real LCD. DSEG glyphs are fixed width, so
+     the two layers line up exactly. */
+  .segments {
+    position: relative;
+    display: inline-block;
     white-space: nowrap;
+    line-height: 1;
   }
-  #ampm {
-    font-size: 0.18em;
-    font-weight: 300;
-    letter-spacing: 0.05em;
-    margin-left: 0.15em;
-    color: #8a8a8a;
+  .segments .ghost {
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: #f2f2f2;
+    opacity: 0.07;
+  }
+  .segments .lit { position: relative; }
+
+  #time {
+    font-family: 'DSEG7', monospace;
+    font-size: 24vw;
   }
   #date {
-    margin-top: 2vw;
+    margin-top: 4vw;
+    font-family: 'DSEG14', monospace;
     font-size: 5vw;
-    font-weight: 300;
+    word-spacing: 0.35em;
     color: #b5b5b5;
-    letter-spacing: 0.04em;
   }
 
   #weather {
     margin-top: 5vw;
-    display: -webkit-box;
-    display: -webkit-flex;
-    display: flex;
-    -webkit-box-align: center;
-    -webkit-align-items: center;
-    align-items: center;
     color: #d8d8d8;
     opacity: 0;
     -webkit-transition: opacity 0.6s;
     transition: opacity 0.6s;
   }
   #weather.ready { opacity: 1; }
+  .w-row {
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-box-align: center;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+  }
   #w-icon { font-size: 7vw; margin-right: 2.5vw; }
   #w-temp { font-size: 7vw; font-weight: 200; margin-right: 3vw; }
   #w-detail { text-align: left; font-size: 3.2vw; line-height: 1.35; color: #9a9a9a; }
   #w-desc { color: #d8d8d8; }
 
+  #w-row2 { margin-top: 2vw; font-size: 3.2vw; color: #9a9a9a; }
+  #w-row2 .stat { margin: 0 2.5vw; }
+  #w-row2 b { font-weight: 400; color: #d8d8d8; }
+
   /* Portrait: the screen is narrow, so size off the width more generously */
   @media (orientation: portrait) {
-    #time { font-size: 27vw; }
-    #date { font-size: 6vw; margin-top: 3vw; }
-    #weather { margin-top: 10vw; }
+    #time { font-size: 26vw; }
+    #date { font-size: 7vw; margin-top: 5vw; }
+    #weather { margin-top: 12vw; }
     #w-icon, #w-temp { font-size: 10vw; }
-    #w-detail { font-size: 4.2vw; }
+    #w-detail, #w-row2 { font-size: 4.2vw; }
+    #w-row2 { margin-top: 3vw; }
   }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="time"><span id="hm">--:--</span><span id="ampm"></span></div>
-  <div id="date">&nbsp;</div>
+  <div id="time" class="segments"><span class="ghost">88:88</span><span class="lit" id="hm">--:--</span></div>
+  <div id="date" class="segments"><span class="ghost">~~~ ~~~ ~~</span><span class="lit" id="date-text"></span></div>
   <div id="weather">
-    <div id="w-icon"></div>
-    <div id="w-temp"></div>
-    <div id="w-detail">
-      <div id="w-desc"></div>
-      <div id="w-extra"></div>
+    <div class="w-row">
+      <div id="w-icon"></div>
+      <div id="w-temp"></div>
+      <div id="w-detail">
+        <div id="w-desc"></div>
+        <div id="w-extra"></div>
+      </div>
+    </div>
+    <div class="w-row" id="w-row2">
+      <span class="stat">Humidity <b id="w-humidity"></b></span>
+      <span class="stat">Precip <b id="w-precip"></b></span>
     </div>
   </div>
 </div>
@@ -119,36 +155,20 @@
     retryMinutes: 2
   };
 
-  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-                'August', 'September', 'October', 'November', 'December'];
+  var DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  var MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
-  // localStorage can throw (private mode), so every access is guarded.
-  function load(key, fallback) {
-    try { var v = localStorage.getItem(key); return v === null ? fallback : v; }
-    catch (e) { return fallback; }
-  }
-  function save(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) {}
-  }
-
   // ---- Clock ----------------------------------------------------------
-  var use24h = load('clock24h', '1') === '1';
-
   function renderClock() {
     var now = new Date();
-    var h = now.getHours();
-    var ampm = '';
-    if (!use24h) {
-      ampm = h < 12 ? 'AM' : 'PM';
-      h = h % 12 || 12;
-    }
-    $('hm').innerHTML = (use24h ? pad(h) : h) + ':' + pad(now.getMinutes());
-    $('ampm').innerHTML = ampm;
-    $('date').innerHTML = DAYS[now.getDay()] + ', ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
+    $('hm').innerHTML = pad(now.getHours()) + ':' + pad(now.getMinutes());
+    // Always 10 characters so it lines up with the ghost segments.
+    $('date-text').innerHTML = DAYS[now.getDay()] + ' ' + MONTHS[now.getMonth()] + ' ' +
+                               pad(now.getDate());
   }
 
   function tick() {
@@ -156,13 +176,6 @@
     // Re-sync to the top of each second so the minute flips on time.
     setTimeout(tick, 1000 - (new Date().getMilliseconds()) + 5);
   }
-
-  // Tap the time to switch between 12h and 24h.
-  $('time').addEventListener('click', function () {
-    use24h = !use24h;
-    save('clock24h', use24h ? '1' : '0');
-    renderClock();
-  });
 
   // ---- Weather --------------------------------------------------------
   // wttr.in weather codes (WorldWeatherOnline) -> emoji
@@ -185,6 +198,19 @@
     return h < 6 || h >= 20;
   }
 
+  // Chance of rain or snow for the 3-hour forecast slot covering the current
+  // hour ("0", "300", ... "2100" in wttr.in's hourly data).
+  function precipChance(today) {
+    if (!today || !today.hourly) return null;
+    var hhmm = new Date().getHours() * 100;
+    var slot = null;
+    for (var i = 0; i < today.hourly.length; i++) {
+      if (parseInt(today.hourly[i].time, 10) <= hhmm) slot = today.hourly[i];
+    }
+    if (!slot) return null;
+    return Math.max(parseInt(slot.chanceofrain, 10) || 0, parseInt(slot.chanceofsnow, 10) || 0);
+  }
+
   function renderWeather(data) {
     var cur = data.current_condition[0];
     var today = data.weather && data.weather[0];
@@ -203,6 +229,10 @@
     }
     extra.push('Feels ' + (f ? cur.FeelsLikeF : cur.FeelsLikeC) + '&deg;');
     $('w-extra').innerHTML = extra.join(' &middot; ');
+
+    var precip = precipChance(today);
+    $('w-humidity').innerHTML = cur.humidity + '%';
+    $('w-precip').innerHTML = precip === null ? '&ndash;' : precip + '%';
 
     $('weather').className = 'ready';
   }
@@ -258,9 +288,9 @@
   document.addEventListener('touchmove', function (e) { e.preventDefault(); }, false);
 
   // ---- Offline cache --------------------------------------------------
-  // When serve.py is running and the files changed, Safari downloads the new
-  // version in the background; swap it in and reload. If the PC is off, the
-  // update check just fails quietly and the cached copy keeps running.
+  // When a new version is deployed, Safari downloads it in the background;
+  // swap it in and reload. If the phone is offline, the update check just
+  // fails quietly and the cached copy keeps running.
   var appCache = window.applicationCache;
   if (appCache) {
     appCache.addEventListener('updateready', function () {
