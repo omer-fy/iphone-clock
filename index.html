@@ -169,7 +169,13 @@
     text-overflow: ellipsis;
   }
   /* Apple's emoji are drawn smaller within their box than Windows' */
-  .ios #w-icon { font-size: 16vw; }
+  .ios #w-icon {
+    font-size: 20vw;
+    margin-top: -4vw;  /* keep the row height set by the temperature */
+    margin-bottom: -4vw;
+    -webkit-flex-shrink: 0;
+    flex-shrink: 0;
+  }
   #w-desc { color: #d8d8d8; }
 
   /* ---- Prayer times ------------------------------------------------------ */
@@ -274,7 +280,7 @@
     #greg, #hijri { font-size: 3.6vw; margin-top: 1.4vw; }
     #weather { margin-top: 6vw; }
     #w-icon { font-size: 11vw; }
-    .ios #w-icon { font-size: 13.75vw; }
+    .ios #w-icon { font-size: 13.75vw; margin-top: 0; margin-bottom: 0; }
     #w-temp { font-size: 16vw; }
     #w-detail { font-size: 3.5vw; }
     #w-desc { max-width: 42vw; }
