@@ -148,7 +148,6 @@
   /* The temperature's digits are sized to roughly the height of the three
      detail lines next to it (3 x 2.4vw x 1.35 = ~9.7vw); Inter Tight digits
      are 0.74em tall and sit low in the line box, hence the nudge up. */
-  #w-icon { font-size: 7.6vw; line-height: 1; margin-right: 1.5vw; }
   #w-temp {
     font-family: 'Inter Tight', Inter, -apple-system, "Helvetica Neue", sans-serif;
     font-weight: 500;
@@ -159,7 +158,7 @@
     top: -0.06em;
     margin-right: 2vw;
   }
-  #w-detail { text-align: left; font-size: 2.4vw; line-height: 1.35; color: #9a9a9a; }
+  #w-detail { text-align: left; font-size: 2.9vw; line-height: 1.35; color: #9a9a9a; }
   /* wttr.in descriptions can be long ("Patchy light rain in area with
      thunder"); keep them to the width of the lines below. */
   #w-desc {
@@ -168,8 +167,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* Apple's emoji are drawn smaller within their box than Windows' */
-  .ios #w-icon { font-size: 16vw; }
   #w-desc { color: #d8d8d8; }
 
   /* ---- Prayer times ------------------------------------------------------ */
@@ -273,8 +270,6 @@
     #weekday { font-size: 4.2vw; }
     #greg, #hijri { font-size: 3.6vw; margin-top: 1.4vw; }
     #weather { margin-top: 6vw; }
-    #w-icon { font-size: 11vw; }
-    .ios #w-icon { font-size: 13.75vw; }
     #w-temp { font-size: 16vw; }
     #w-detail { font-size: 3.5vw; }
     #w-desc { max-width: 42vw; }
@@ -330,7 +325,6 @@
     </div>
     <div id="weather">
       <div class="w-row">
-        <div id="w-icon"></div>
         <div id="w-temp"></div>
         <div id="w-detail">
           <div id="w-desc"></div>
@@ -374,12 +368,7 @@
                       'Jumada al-Akhirah', 'Rajab', "Sha'ban", 'Ramadan', 'Shawwal',
                       "Dhu al-Qa'dah", 'Dhu al-Hijjah'];
   var PRAYERS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-  var SUNRISE = 1, MAGHRIB = 4;
-
-  // Apple's emoji render smaller than other platforms'; CSS sizes them up.
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-    document.documentElement.className += ' ios';
-  }
+  var SUNRISE = 1, MAGHRIB = 4;  // indexes into PRAYERS (Maghrib = sunset)
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -503,6 +492,8 @@
       : '&nbsp;');
     if (!today) return;
 
+    autoTheme(hhmm(now) < today.t[SUNRISE] || hhmm(now) >= today.t[MAGHRIB]);
+
     // The current prayer is the last one whose time has started: Asr stays
     // highlighted until Maghrib, and so on. Before Fajr it's still the
     // previous night's Isha. "HH:MM" strings compare correctly as strings.
@@ -535,6 +526,21 @@
     applyTheme();
   }
 
+  // Dark from sunset (Maghrib) until sunrise, light in between. The theme
+  // only changes when that state flips, so a double-tap override lasts until
+  // the next sunrise or sunset. The last state is stored so a reload doesn't
+  // undo an override.
+  var autoState = load('autoTheme', '');
+  function autoTheme(isNight) {
+    var state = isNight ? 'dark' : 'light';
+    if (state === autoState) return;
+    autoState = state;
+    save('autoTheme', state);
+    theme = state;
+    save('theme', theme);
+    applyTheme();
+  }
+
   var lastTap = { time: 0, x: 0, y: 0 };
   var lastTouch = 0;
   document.addEventListener('touchend', function (e) {
@@ -559,33 +565,6 @@
   }, false);
 
   // ---- Weather --------------------------------------------------------
-  // wttr.in weather codes (WorldWeatherOnline) -> emoji
-  function iconFor(code, isNight) {
-    code = parseInt(code, 10);
-    if (code === 113) return isNight ? '🌙' : '☀️';       // clear
-    if (code === 116) return isNight ? '☁️' : '⛅️';       // partly cloudy
-    if (code === 119 || code === 122) return '☁️';                   // cloudy
-    if (code === 143 || code === 248 || code === 260) return '🌫';   // fog
-    if (code === 200 || code >= 386) return '⛈';                          // thunder
-    if ([179, 227, 230, 323, 326, 329, 332, 335, 338, 368, 371].indexOf(code) !== -1)
-      return '❄️';                                                   // snow
-    if ([182, 185, 281, 284, 311, 314, 317, 320, 350, 362, 365, 374, 377].indexOf(code) !== -1)
-      return '🌨';                                                   // sleet
-    return '🌧';                                                     // rain / drizzle
-  }
-
-  // Night = before sunrise or after Maghrib, from the prayer data when we
-  // have it; otherwise a rough 6:00-20:00 day.
-  function isNightNow() {
-    var now = new Date();
-    var today = dayEntry(now);
-    if (today) {
-      var t = hhmm(now);
-      return t < today.t[SUNRISE] || t >= today.t[MAGHRIB];
-    }
-    return now.getHours() < 6 || now.getHours() >= 20;
-  }
-
   // Chance of rain or snow for the 3-hour forecast slot covering the current
   // hour ("0", "300", ... "2100" in wttr.in's hourly data).
   function precipChance(today) {
@@ -599,8 +578,8 @@
     return Math.max(parseInt(slot.chanceofrain, 10) || 0, parseInt(slot.chanceofsnow, 10) || 0);
   }
 
-  // Last successful response. It's re-rendered every minute so the day/night
-  // icon and the precipitation slot stay current between hourly fetches.
+  // Last successful response. It's re-rendered every minute so the
+  // precipitation slot stays current between hourly fetches.
   var lastWeather = null;
   var lastWeatherAt = 0;
 
@@ -611,7 +590,6 @@
     var temp = f ? cur.temp_F : cur.temp_C;
     var desc = (cur.weatherDesc[0].value || '').replace(/\s+$/, '');
 
-    setHtml($('w-icon'), iconFor(cur.weatherCode, isNightNow()));
     setHtml($('w-temp'), temp + '&deg;');
     setHtml($('w-desc'), desc);
 
