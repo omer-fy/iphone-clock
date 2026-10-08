@@ -53,7 +53,7 @@
      3 x 2 grid at the bottom. */
   #app {
     height: 100%;
-    padding: 0 3.5vw;  /* landscape side margins (left and right) */
+    padding: 0 5vw;  /* landscape side margins (left and right) */
     box-sizing: border-box;
     display: -webkit-box;
     display: -webkit-flex;
@@ -169,12 +169,37 @@
     text-overflow: ellipsis;
   }
   /* Apple's emoji are drawn smaller within their box than Windows' */
-  .ios #w-icon { font-size: 9.5vw; }
+  .ios #w-icon { font-size: 16vw; }
   #w-desc { color: #d8d8d8; }
 
   /* ---- Prayer times ------------------------------------------------------ */
-  #prayers {
-    margin-left: 4vw;  /* minimum gap; space-between spreads any extra */
+  /* #side fills the space right of the clock with the prayers pushed to its
+     far edge, so its ::before can draw the divider midway across the gap.
+     21.8vw is the #prayers width (.prayer width minus its negative margins);
+     3vw is the minimum gap, kept as #main's right margin. */
+  #main { margin-right: 3vw; }
+  #side {
+    position: relative;
+    -webkit-box-flex: 1;
+    -webkit-flex: 1;
+    flex: 1;
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-box-pack: end;
+    -webkit-justify-content: flex-end;
+    justify-content: flex-end;
+  }
+  #side::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc((100% - 24.8vw) / 2 - 1px);
+    width: 2px;
+    background: rgba(255,255,255,0.26);
+    -webkit-transition: background-color 0.4s;
+    transition: background-color 0.4s;
   }
   .prayer {
     display: -webkit-box;
@@ -186,11 +211,11 @@
     -webkit-box-align: baseline;
     -webkit-align-items: baseline;
     align-items: baseline;
-    width: 23vw;
+    width: 25vw;
     /* Horizontal padding gives the highlight room around the text; the
        matching negative margin keeps it from changing the layout. */
     margin: 0 -1.6vw;
-    padding: 1.15vw 1.6vw;
+    padding: 1.9vw 1.6vw;
     border-radius: 1.8vw;
     color: #8f8f8f;
     -webkit-transition: background-color 0.4s, color 0.4s;
@@ -208,7 +233,7 @@
     color: #d8d8d8;
   }
   /* The current prayer sits on a rounded highlight */
-  .prayer.current { background: rgba(255,255,255,0.14); }
+  .prayer.current { background: rgba(255,255,255,0.20); }
   .prayer.current, .prayer.current .p-time { color: #fff; }
 
   /* ---- Light theme (double-tap to switch) -------------------------------- */
@@ -220,6 +245,7 @@
   body.light #weather, body.light #w-desc { color: #2a2a2a; }
   body.light #w-detail { color: #5f5f5f; }
   body.light #prayers { border-color: rgba(0,0,0,0.12); }
+  body.light #side::before { background: rgba(0,0,0,0.12); }
   body.light .prayer { color: #5f5f5f; }
   body.light .p-time { color: #2a2a2a; }
   body.light .prayer.current { background: rgba(0,0,0,0.07); }
@@ -252,6 +278,15 @@
     #w-temp { font-size: 16vw; }
     #w-detail { font-size: 3.5vw; }
     #w-desc { max-width: 42vw; }
+
+    #main { margin-right: 0; }
+    #side {
+      -webkit-box-flex: 0;
+      -webkit-flex: none;
+      flex: none;
+      display: block;
+    }
+    #side::before { display: none; }
 
     #prayers {
       margin: 7vw 0 0;
@@ -305,13 +340,15 @@
       </div>
     </div>
   </div>
-  <div id="prayers">
-    <div class="prayer"><span class="p-name">Fajr</span><span class="p-time">--:--</span></div>
-    <div class="prayer"><span class="p-name">Sunrise</span><span class="p-time">--:--</span></div>
-    <div class="prayer"><span class="p-name">Dhuhr</span><span class="p-time">--:--</span></div>
-    <div class="prayer"><span class="p-name">Asr</span><span class="p-time">--:--</span></div>
-    <div class="prayer"><span class="p-name">Maghrib</span><span class="p-time">--:--</span></div>
-    <div class="prayer"><span class="p-name">Isha</span><span class="p-time">--:--</span></div>
+  <div id="side">
+    <div id="prayers">
+      <div class="prayer"><span class="p-name">Fajr</span><span class="p-time">--:--</span></div>
+      <div class="prayer"><span class="p-name">Sunrise</span><span class="p-time">--:--</span></div>
+      <div class="prayer"><span class="p-name">Dhuhr</span><span class="p-time">--:--</span></div>
+      <div class="prayer"><span class="p-name">Asr</span><span class="p-time">--:--</span></div>
+      <div class="prayer"><span class="p-name">Maghrib</span><span class="p-time">--:--</span></div>
+      <div class="prayer"><span class="p-name">Isha</span><span class="p-time">--:--</span></div>
+    </div>
   </div>
 </div>
 
