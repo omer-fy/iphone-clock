@@ -53,7 +53,7 @@
      3 x 2 grid at the bottom. */
   #app {
     height: 100%;
-    padding: 0 3.5vw;
+    padding: 0 3.5vw;  /* landscape side margins (left and right) */
     box-sizing: border-box;
     display: -webkit-box;
     display: -webkit-flex;
@@ -187,10 +187,14 @@
     -webkit-align-items: baseline;
     align-items: baseline;
     width: 23vw;
-    padding: 1.15vw 0;
+    /* Horizontal padding gives the highlight room around the text; the
+       matching negative margin keeps it from changing the layout. */
+    margin: 0 -1.6vw;
+    padding: 1.15vw 1.6vw;
+    border-radius: 1.8vw;
     color: #8f8f8f;
-    -webkit-transition: opacity 0.4s, color 0.4s;
-    transition: opacity 0.4s, color 0.4s;
+    -webkit-transition: background-color 0.4s, color 0.4s;
+    transition: background-color 0.4s, color 0.4s;
   }
   .p-name {
     font-size: 2.2vw;
@@ -203,17 +207,9 @@
     font-size: 4vw;
     color: #d8d8d8;
   }
+  /* The current prayer sits on a rounded highlight */
+  .prayer.current { background: rgba(255,255,255,0.14); }
   .prayer.current, .prayer.current .p-time { color: #fff; }
-  /* Small dot marking the current prayer */
-  .prayer.current .p-name:before {
-    content: '';
-    display: inline-block;
-    width: 0.55em;
-    height: 0.55em;
-    margin: 0 0.5em 0.1em -1.05em;
-    border-radius: 50%;
-    background: currentColor;
-  }
 
   /* ---- Light theme (double-tap to switch) -------------------------------- */
   body.light { background: #f5f5f3; color: #111; }
@@ -226,6 +222,7 @@
   body.light #prayers { border-color: rgba(0,0,0,0.12); }
   body.light .prayer { color: #5f5f5f; }
   body.light .p-time { color: #2a2a2a; }
+  body.light .prayer.current { background: rgba(0,0,0,0.07); }
   body.light .prayer.current, body.light .prayer.current .p-time { color: #000; }
 
   #weekday, #greg, #hijri, #weather, #w-desc, #w-detail, #prayers, .p-time {
@@ -268,7 +265,9 @@
       flex-wrap: wrap;
     }
     .prayer {
-      width: 33.333%;
+      width: 31.333%;
+      margin: 0 1%;
+      border-radius: 2.6vw;
       -webkit-box-orient: vertical;
       -webkit-flex-direction: column;
       flex-direction: column;
